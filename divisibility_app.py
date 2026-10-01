@@ -1,5 +1,5 @@
 """
-Divisibility and Division of Integers (standalone).
+Divisibility and Division of Integers: single file (logic + Streamlit UI).
 Run with:  streamlit run divisibility_app.py
 
 One search bar. Type any of these:
@@ -13,22 +13,25 @@ Numbers may be separated by spaces and/or commas.
 
 
 # =====================================================================
-# Math / solution builders
+# Helper (was imported from formatting.py)
 # =====================================================================
 def paren(n: int) -> str:
     """Wraps negative numbers in parentheses so signs never collide."""
     return f"({n})" if n < 0 else str(n)
 
 
+# =====================================================================
+# Divisibility and the Division Algorithm (same logic as divisibility.py)
+# =====================================================================
 def division_algorithm(a: int, d: int) -> tuple:
     """Returns (q, r) with a = q(d) + r and 0 <= r < |d|. Works for negative a and d."""
-    r = a % abs(d)
-    q = (a - r) // d
+    r = a % abs(d)       # Python's % with a positive modulus is already in [0, |d|)
+    q = (a - r) // d     # exact division
     return q, r
 
 
 def division_lines(a: int, d: int) -> tuple:
-    """Step-by-step Division Algorithm for a divided by d. Returns (lines, q, r)."""
+    """Step-by-step lines for a divided by d. Returns (lines, q, r)."""
     q, r = division_algorithm(a, d)
     ad = abs(d)
     k = a // ad  # largest k with k|d| <= a
@@ -45,6 +48,7 @@ def division_lines(a: int, d: int) -> tuple:
         "",
         f"r = {a} - {paren(k)}({ad}) = {r}",
     ]
+
     if d > 0:
         lines.append(f"q = {k}")
     else:
@@ -62,40 +66,41 @@ def division_lines(a: int, d: int) -> tuple:
     return lines, q, r
 
 
-def divisibility_lines(a: int, d: int, q: int, r: int) -> tuple:
-    """Does d divide a? Returns (lines, answer)."""
-    if r == 0:
-        return (
-            [
-                f"The remainder is r = 0, so {d} divides {a}.",
-                f"{a} = {paren(q)}({d})",
-                f"Therefore {d} | {a}  ({a} is a multiple of {d}).",
-            ],
-            f"{d} | {a}  (q = {q})",
-        )
-    return (
-        [
-            f"The remainder is r = {r}, which is not 0.",
-            f"Therefore {d} does not divide {a}.",
-        ],
-        f"{d} does not divide {a}",
-    )
-
-
-def solve_single(a: int, d: int) -> dict:
+def build_division(a: int, d: int) -> dict:
+    """
+    Returns a dict with:
+      steps, answer,              (division algorithm)
+      divis_steps, divis_answer   (does d divide a?)
+    """
     lines, q, r = division_lines(a, d)
-    divis_lines, divis_answer = divisibility_lines(a, d, q, r)
+
+    if r == 0:
+        divis_lines = [
+            f"The remainder is r = 0, so {d} divides {a}.",
+            f"{a} = {paren(q)}({d})",
+            f"Therefore {d} | {a}  ({a} is a multiple of {d}).",
+        ]
+        divis_answer = f"{d} | {a}  (q = {q})"
+    else:
+        divis_lines = [
+            f"The remainder is r = {r} != 0, so {d} does not divide {a}.",
+            f"Therefore {d} does not divide {a}.",
+        ]
+        divis_answer = f"{d} does not divide {a}"
+
     return {
-        "title": f"Dividing {a} by {d}",
-        "answers": [f"{a} = {paren(q)}({d}) + {r}   (q = {q}, r = {r})", divis_answer],
-        "sections": [
-            ("Division Algorithm Solution", "\n".join(lines)),
-            ("Divisibility", "\n".join(divis_lines)),
-        ],
+        "steps": "\n".join(lines),
+        "answer": f"{a} = {paren(q)}({d}) + {r}   (q = {q}, r = {r})",
+        "divis_steps": "\n".join(divis_lines),
+        "divis_answer": divis_answer,
     }
 
 
-def solve_set(numbers: list, d: int) -> dict:
+def build_set_division(numbers: list, d: int) -> dict:
+    """
+    Divides every integer in `numbers` by the same divisor d.
+    Returns a dict with: steps, answer, divisible, not_divisible, not_answer.
+    """
     lines = [f"Divisor d = {d}, |d| = {abs(d)}, so 0 <= r < {abs(d)}", ""]
     divisible, not_divisible = [], []
 
@@ -105,18 +110,21 @@ def solve_set(numbers: list, d: int) -> dict:
         lines.append(f"{a} = {paren(q)}({d}) + {r}   ->  {verdict}")
         (divisible if r == 0 else not_divisible).append(a)
 
-    fmt = lambda xs: "{" + (", ".join(map(str, xs)) if xs else "none") + "}"
+    joined = ", ".join(map(str, numbers))
+    div_txt = ", ".join(map(str, divisible)) if divisible else "none"
+    not_txt = ", ".join(map(str, not_divisible)) if not_divisible else "none"
+
     return {
-        "title": f"Dividing the set {fmt(numbers)} by {d}",
-        "answers": [
-            f"Divisible by {d}: {fmt(divisible)}",
-            f"Not divisible by {d}: {fmt(not_divisible)}",
-        ],
-        "sections": [("Solution", "\n".join(lines))],
+        "steps": "\n".join(lines),
+        "answer": f"Divisible by {d} in {{{joined}}}: {{{div_txt}}}",
+        "divisible": divisible,
+        "not_divisible": not_divisible,
+        "not_answer": f"Not divisible by {d}: {{{not_txt}}}",
     }
 
 
-def solve_divisors(n: int) -> dict:
+def build_divisors(n: int) -> dict:
+    """All integer divisors of n (n != 0), found by testing 1..sqrt(|n|)."""
     m = abs(n)
     lines, small, large = [], [], []
     i = 1
@@ -132,38 +140,44 @@ def solve_divisors(n: int) -> dict:
         i += 1
 
     positive = small + large[::-1]
-    everything = sorted([-p for p in positive] + positive)
+    all_divs = sorted([-p for p in positive] + positive)
     return {
-        "title": f"Divisors of {n}",
-        "answers": [
-            f"Positive divisors of {m}: {', '.join(map(str, positive))}",
-            f"All divisors of {n}: {', '.join(map(str, everything))}",
-        ],
-        "sections": [("Solution (testing each i up to the square root of |n|)", "\n".join(lines))],
+        "steps": "\n".join(lines),
+        "answer": f"Positive divisors of {m}: {', '.join(map(str, positive))}",
+        "all_answer": f"All divisors of {n}: {', '.join(map(str, all_divs))}",
     }
 
 
 # =====================================================================
-# Input parsing
+# Search-bar parsing
 # =====================================================================
 def parse_numbers(text: str) -> list:
+    # Accept spaces and/or commas as separators
     return [int(piece) for piece in text.replace(",", " ").split()]
 
 
-def solve_query(query: str) -> dict:
-    """Reads the search bar text and returns a solution dict. Raises ValueError on bad input."""
+def parse_query(query: str) -> tuple:
+    """
+    Reads the search bar text. Returns one of:
+      ("divisors", n)
+      ("divide", numbers, d)      numbers has one or more integers
+    Raises ValueError with a friendly message on bad input.
+    """
     text = query.strip().replace("÷", "/")
     if not text:
         raise ValueError("Type something in the search bar first.")
 
     # divisors 36
     if text.lower().startswith("divisors"):
-        nums = parse_numbers(text[len("divisors"):])
+        try:
+            nums = parse_numbers(text[len("divisors"):])
+        except ValueError:
+            raise ValueError("Use whole numbers only, e.g. divisors 36")
         if len(nums) != 1 or nums[0] == 0:
             raise ValueError("Use: divisors n   (one nonzero integer), e.g. divisors 36")
-        return solve_divisors(nums[0])
+        return ("divisors", nums[0])
 
-    # 5 | 10 20 33     (d divides each number in the set)
+    # 5 | 10 20 33     (d divides each number)
     if "|" in text:
         left, right = text.split("|", 1)
         try:
@@ -172,12 +186,10 @@ def solve_query(query: str) -> dict:
             raise ValueError("Use whole numbers only, e.g. 5 | 20")
         if len(ds) != 1 or not nums:
             raise ValueError("Use: d | a   or   d | a b c ...   e.g. 5 | 10 20 33")
-        if ds[0] == 0:
-            raise ValueError("The divisor cannot be zero.")
-        return solve_single(nums[0], ds[0]) if len(nums) == 1 else solve_set(nums, ds[0])
+        d = ds[0]
 
     # -17 / 5   or   12 -17 25 40 / 5
-    if "/" in text:
+    elif "/" in text:
         left, right = text.rsplit("/", 1)
         try:
             nums, ds = parse_numbers(left), parse_numbers(right)
@@ -185,11 +197,14 @@ def solve_query(query: str) -> dict:
             raise ValueError("Use whole numbers only, e.g. -17 / 5")
         if len(ds) != 1 or not nums:
             raise ValueError("Use: a / d   or   a b c ... / d   e.g. 12 -17 25 / 5")
-        if ds[0] == 0:
-            raise ValueError("The divisor cannot be zero.")
-        return solve_single(nums[0], ds[0]) if len(nums) == 1 else solve_set(nums, ds[0])
+        d = ds[0]
 
-    raise ValueError("Use  a / d,  a b c / d,  d | a,  or  divisors n.")
+    else:
+        raise ValueError("Use  a / d,  a b c / d,  d | a,  or  divisors n.")
+
+    if d == 0:
+        raise ValueError("The divisor cannot be zero.")
+    return ("divide", nums, d)
 
 
 # =====================================================================
@@ -199,7 +214,7 @@ def main():
     import streamlit as st
 
     st.title("Divisibility and Division of Integers")
-    st.write("Division Algorithm (a = qd + r, 0 <= r < |d|), divisibility tests, and divisors.")
+    st.write("Division Algorithm (a = qd + r, 0 ≤ r < |d|), divisibility tests, and divisors of integers.")
 
     query = st.text_input(
         "Search bar",
@@ -211,31 +226,52 @@ def main():
 
     if st.button("Calculate"):
         try:
-            sol = solve_query(query)
+            parsed = parse_query(query)
         except ValueError as err:
             st.error(str(err))
             st.stop()
 
-        st.subheader(sol["title"])
-        st.subheader("Final Answers")
-        for ans in sol["answers"]:
-            st.success(ans)
+        if parsed[0] == "divisors":
+            res = build_divisors(parsed[1])
 
-        for heading, body in sol["sections"]:
+            st.subheader("Final Answers")
+            st.success(res["answer"])
+            st.success(res["all_answer"])
+
             st.divider()
-            st.subheader(heading)
-            st.code(body, language="text")
+            st.subheader("Solution (testing each i up to √|n|)")
+            st.code(res["steps"], language="text")
+
+        else:
+            _, nums, d = parsed
+
+            if len(nums) == 1:
+                res = build_division(nums[0], d)
+
+                st.subheader("Final Answers")
+                st.success(res["answer"])
+                st.success(res["divis_answer"])
+
+                st.divider()
+                st.subheader("Division Algorithm Solution")
+                st.code(res["steps"], language="text")
+
+                st.divider()
+                st.subheader("Divisibility")
+                st.code(res["divis_steps"], language="text")
+                st.info(res["divis_answer"])
+
+            else:
+                res = build_set_division(nums, d)
+
+                st.subheader("Final Answers")
+                st.success(res["answer"])
+                st.success(res["not_answer"])
+
+                st.divider()
+                st.subheader("Solution")
+                st.code(res["steps"], language="text")
 
 
 if __name__ == "__main__":
     main()
-else:
-    # Streamlit runs the script with __name__ == "__main__"; this branch covers
-    # `streamlit run` variants that import the module instead.
-    try:
-        from streamlit.runtime.scriptrunner import get_script_run_ctx
-
-        if get_script_run_ctx() is not None:
-            main()
-    except Exception:
-        pass
