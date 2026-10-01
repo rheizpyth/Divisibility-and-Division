@@ -2,13 +2,10 @@
 Divisibility and Division of Integers: single file (logic + Streamlit UI).
 Run with:  streamlit run divisibility_app.py
 
-One search bar. Type any of these:
-    -17 / 5                  Division Algorithm: -17 = q(5) + r
-    12 -17 25 40 / 5         Divide a set of integers by 5
-    5 | 20                   Does 5 divide 20?
-    5 | 10 20 33 -45         Does 5 divide each number in the set?
-    divisors 36              All divisors of 36
-Numbers may be separated by spaces and/or commas.
+Pick what you need from the choices:
+    1. Divide one integer by another   (Division Algorithm + divisibility check)
+    2. Divide a set of integers by one divisor
+    3. Find all divisors of an integer
 """
 
 
@@ -149,90 +146,109 @@ def build_divisors(n: int) -> dict:
 
 
 # =====================================================================
-# Search-bar parsing
+# Input helper
 # =====================================================================
 def parse_numbers(text: str) -> list:
     # Accept spaces and/or commas as separators
     return [int(piece) for piece in text.replace(",", " ").split()]
 
 
-def parse_query(query: str) -> tuple:
-    """
-    Reads the search bar text. Returns one of:
-      ("divisors", n)
-      ("divide", numbers, d)      numbers has one or more integers
-    Raises ValueError with a friendly message on bad input.
-    """
-    text = query.strip().replace("÷", "/")
-    if not text:
-        raise ValueError("Type something in the search bar first.")
-
-    # divisors 36
-    if text.lower().startswith("divisors"):
-        try:
-            nums = parse_numbers(text[len("divisors"):])
-        except ValueError:
-            raise ValueError("Use whole numbers only, e.g. divisors 36")
-        if len(nums) != 1 or nums[0] == 0:
-            raise ValueError("Use: divisors n   (one nonzero integer), e.g. divisors 36")
-        return ("divisors", nums[0])
-
-    # 5 | 10 20 33     (d divides each number)
-    if "|" in text:
-        left, right = text.split("|", 1)
-        try:
-            ds, nums = parse_numbers(left), parse_numbers(right)
-        except ValueError:
-            raise ValueError("Use whole numbers only, e.g. 5 | 20")
-        if len(ds) != 1 or not nums:
-            raise ValueError("Use: d | a   or   d | a b c ...   e.g. 5 | 10 20 33")
-        d = ds[0]
-
-    # -17 / 5   or   12 -17 25 40 / 5
-    elif "/" in text:
-        left, right = text.rsplit("/", 1)
-        try:
-            nums, ds = parse_numbers(left), parse_numbers(right)
-        except ValueError:
-            raise ValueError("Use whole numbers only, e.g. -17 / 5")
-        if len(ds) != 1 or not nums:
-            raise ValueError("Use: a / d   or   a b c ... / d   e.g. 12 -17 25 / 5")
-        d = ds[0]
-
-    else:
-        raise ValueError("Use  a / d,  a b c / d,  d | a,  or  divisors n.")
-
-    if d == 0:
-        raise ValueError("The divisor cannot be zero.")
-    return ("divide", nums, d)
-
-
 # =====================================================================
 # Streamlit UI
 # =====================================================================
+CHOICE_ONE = "Divide one integer by another"
+CHOICE_SET = "Divide a set of integers by one divisor"
+CHOICE_DIVISORS = "Find all divisors of an integer"
+
+
 def main():
     import streamlit as st
 
     st.title("Divisibility and Division of Integers")
     st.write("Division Algorithm (a = qd + r, 0 ≤ r < |d|), divisibility tests, and divisors of integers.")
 
-    query = st.text_input(
-        "Search bar",
-        placeholder="e.g.  -17 / 5   |   12 -17 25 40 / 5   |   5 | 20   |   divisors 36",
-    )
-    st.caption(
-        "a / d: divide.  a b c / d: divide a set.  d | a: does d divide a?  divisors n: list divisors."
-    )
+    mode = st.radio("What do you want to do?", [CHOICE_ONE, CHOICE_SET, CHOICE_DIVISORS])
+    st.divider()
 
-    if st.button("Calculate"):
-        try:
-            parsed = parse_query(query)
-        except ValueError as err:
-            st.error(str(err))
-            st.stop()
+    # ---------------- 1. One integer divided by another ----------------
+    if mode == CHOICE_ONE:
+        col1, col2 = st.columns(2)
+        a_text = col1.text_input("Dividend (a)", placeholder="e.g. -17", key="one_a")
+        d_text = col2.text_input("Divisor (d)", placeholder="e.g. 5", key="one_d")
 
-        if parsed[0] == "divisors":
-            res = build_divisors(parsed[1])
+        if st.button("Calculate", key="one_btn"):
+            try:
+                a, d = int(a_text), int(d_text)
+            except ValueError:
+                st.error("Invalid input. Enter whole numbers only.")
+                st.stop()
+            if d == 0:
+                st.error("The divisor cannot be zero.")
+                st.stop()
+
+            res = build_division(a, d)
+
+            st.subheader("Final Answers")
+            st.success(res["answer"])
+            st.success(res["divis_answer"])
+
+            st.divider()
+            st.subheader("Division Algorithm Solution")
+            st.code(res["steps"], language="text")
+
+            st.divider()
+            st.subheader("Divisibility")
+            st.code(res["divis_steps"], language="text")
+            st.info(res["divis_answer"])
+
+    # ---------------- 2. A set divided by one divisor ----------------
+    elif mode == CHOICE_SET:
+        set_text = st.text_input(
+            "Set of integers (separated by spaces or commas)",
+            placeholder="e.g. 12 -17 25 40 7",
+            key="set_nums",
+        )
+        d_text = st.text_input("Divisor (d)", placeholder="e.g. 5", key="set_d")
+
+        if st.button("Calculate", key="set_btn"):
+            try:
+                nums = parse_numbers(set_text)
+                d = int(d_text)
+            except ValueError:
+                st.error("Invalid input. Enter whole numbers only.")
+                st.stop()
+            if not nums:
+                st.error("Enter at least one integer.")
+                st.stop()
+            if d == 0:
+                st.error("The divisor cannot be zero.")
+                st.stop()
+
+            res = build_set_division(nums, d)
+
+            st.subheader("Final Answers")
+            st.success(res["answer"])
+            st.success(res["not_answer"])
+
+            st.divider()
+            st.subheader("Solution")
+            st.code(res["steps"], language="text")
+
+    # ---------------- 3. All divisors of an integer ----------------
+    else:
+        n_text = st.text_input("Integer (n)", placeholder="e.g. 36", key="divisors_n")
+
+        if st.button("Calculate", key="divisors_btn"):
+            try:
+                n = int(n_text)
+            except ValueError:
+                st.error("Invalid input. Enter a whole number.")
+                st.stop()
+            if n == 0:
+                st.error("Every nonzero integer divides 0, so please enter a nonzero integer.")
+                st.stop()
+
+            res = build_divisors(n)
 
             st.subheader("Final Answers")
             st.success(res["answer"])
@@ -241,36 +257,6 @@ def main():
             st.divider()
             st.subheader("Solution (testing each i up to √|n|)")
             st.code(res["steps"], language="text")
-
-        else:
-            _, nums, d = parsed
-
-            if len(nums) == 1:
-                res = build_division(nums[0], d)
-
-                st.subheader("Final Answers")
-                st.success(res["answer"])
-                st.success(res["divis_answer"])
-
-                st.divider()
-                st.subheader("Division Algorithm Solution")
-                st.code(res["steps"], language="text")
-
-                st.divider()
-                st.subheader("Divisibility")
-                st.code(res["divis_steps"], language="text")
-                st.info(res["divis_answer"])
-
-            else:
-                res = build_set_division(nums, d)
-
-                st.subheader("Final Answers")
-                st.success(res["answer"])
-                st.success(res["not_answer"])
-
-                st.divider()
-                st.subheader("Solution")
-                st.code(res["steps"], language="text")
 
 
 if __name__ == "__main__":
